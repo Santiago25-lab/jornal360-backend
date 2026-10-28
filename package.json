@@ -1,0 +1,49 @@
+{
+  "name": "jornal360-backend",
+  "version": "1.0.0",
+  "description": "Jornal 360 - API de nómina y asistencia",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "test": "jest --runInBand",
+    "test:unit": "jest --runInBand test/unit",
+    "test:e2e": "jest --runInBand test/e2e",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "sql:supabase": "ts-node scripts/generar-sql-supabase.ts"
+  },
+  "engines": {
+    "node": ">=20 <23"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.2.8",
+    "@nestjs/core": "^11.2.8",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/platform-express": "^11.2.8",
+    "bcryptjs": "^3.0.3",
+    "decimal.js": "^10.6.0",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.2.8",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.20.5",
+    "@types/pdfkit": "^0.17.7",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "jest": "^29.7.0",
+    "supertest": "^7.3.1",
+    "ts-jest": "^29.4.15",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3"
+  }
+}
