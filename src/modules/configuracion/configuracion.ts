@@ -5,7 +5,7 @@ import { ErrorNegocio, Usuario, UsuarioSesion, Validar } from '../../common/comu
 import { camel, camelLista, fechaLocal, zFecha, zNumero } from '../../common/util';
 import { Db } from '../../db/db.service';
 import { FormatoArchivo, validarFormato } from '../../domain/archivos';
-import { D } from '../../domain/decimal';
+import { D, Decimal } from '../../domain/decimal';
 import { festivosColombia } from '../../domain/festivos';
 import { FUNCIONES_DISPONIBLES, normalizarId, ordenarPorDependencias, validarFormula } from '../../domain/formulas';
 import { VARIABLES_SISTEMA, variablesConocidas } from '../../domain/nomina';
@@ -255,6 +255,15 @@ const ParametroDto = z.object({
   valor: zNumero,
 });
 
+/** Valor legible para los mensajes: 0.005 en un porcentaje se muestra como 0,5 %. */
+function mostrar(tipo: string, v: string | number): string {
+  const n = D(v);
+  const texto = (x: Decimal) => x.toFixed().replace('.', ',');
+  if (tipo === 'porcentaje') return `${texto(n.mul(100))} %`;
+  if (tipo === 'dinero') return `$ ${Number(n.toFixed(0)).toLocaleString('es-CO')}`;
+  return texto(n);
+}
+
 /** Valor legal precargado vigente en una fecha (los de ley cambian por año o por la reforma). */
 export function valorLegalEn(f: { valor_legal: string | null; vigencias_legales?: { desde: string; valor: string }[] | null }, fecha: string): string | null {
   const l = f.vigencias_legales;
@@ -310,7 +319,7 @@ export class ParametrosService {
     const legal = valorLegalEn(p, d.desde);
     if (legal !== null && D(d.valor).lt(D(legal)) && !d.confirmar && p.tipo !== 'booleano')
       throw new ErrorNegocio(
-        `El valor ${d.valor} es menor que el valor legal precargado (${legal}). Confirme si desea guardarlo de todas formas`,
+        `El valor ${mostrar(p.tipo, d.valor)} es menor que el valor legal precargado (${mostrar(p.tipo, legal)}). Confirme si desea guardarlo de todas formas`,
         409,
         { requiereConfirmacion: true },
       );
