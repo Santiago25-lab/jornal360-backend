@@ -91,6 +91,8 @@ export interface EmpleadoNomina {
   nombre?: string;
   fechaIngreso?: Fecha;
   esPensionado?: boolean;
+  /** Cesantías en el Fondo Nacional del Ahorro (el FNA reconoce los intereses). */
+  cesantiasFna?: boolean;
   claseRiesgo?: number;
   procedimientoRetencion?: 1 | 2;
   porcentajeProcedimiento2?: Num;
@@ -217,6 +219,7 @@ export const VARIABLES_SISTEMA: { codigo: string; descripcion: string }[] = [
   { codigo: 'ES_APRENDIZ', descripcion: '1 si es aprendiz' },
   { codigo: 'ES_APRENDIZ_LECTIVA', descripcion: '1 si es aprendiz en fase lectiva' },
   { codigo: 'ES_PENSIONADO', descripcion: '1 si es pensionado' },
+  { codigo: 'CESANTIAS_FNA', descripcion: '1 si sus cesantías están en el Fondo Nacional del Ahorro' },
   { codigo: 'EXONERADO', descripcion: '1 si aplica la exoneración de aportes' },
   { codigo: 'TIENE_AUXILIO', descripcion: '1 si el contrato permite auxilio de transporte' },
   { codigo: 'CLASE_RIESGO', descripcion: 'Clase de riesgo ARL (1 a 5)' },
@@ -376,6 +379,7 @@ class Calculo {
     this.set('ES_APRENDIZ', bool(esAprendiz));
     this.set('ES_APRENDIZ_LECTIVA', bool(lectiva));
     this.set('ES_PENSIONADO', bool(!!empleado.esPensionado));
+    this.set('CESANTIAS_FNA', bool(!!empleado.cesantiasFna));
     this.set('CLASE_RIESGO', D(empleado.claseRiesgo ?? 1));
     this.set('APORTES_VOLUNTARIOS', D(empleado.aportesVoluntarios ?? 0));
 

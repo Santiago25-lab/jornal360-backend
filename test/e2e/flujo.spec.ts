@@ -107,9 +107,10 @@ describe('API: flujo completo de nómina y asistencia', () => {
   });
 
   it('HU-29 y HU-30: marcación asistida y corrección con motivo', async () => {
-    const a = ok(await c.api('post', '/asistencia/marcaciones', { empleadoId: ids.e2, tipo: 'entrada', hora: '2026-10-28T07:00', motivo: 'Sin batería' }));
+    // Fecha fija distinta de hoy: las marcaciones reales del QR y del kiosco son de hoy y no deben mezclarse.
+    const a = ok(await c.api('post', '/asistencia/marcaciones', { empleadoId: ids.e2, tipo: 'entrada', hora: '2026-10-21T07:00', motivo: 'Sin batería' }));
     expect(a.origen).toBe('asistida');
-    ok(await c.api('post', '/asistencia/correcciones', { empleadoId: ids.e2, tipo: 'salida', hora: '2026-10-28T20:24', motivo: 'Olvidó marcar la salida' }));
+    ok(await c.api('post', '/asistencia/correcciones', { empleadoId: ids.e2, tipo: 'salida', hora: '2026-10-21T20:24', motivo: 'Olvidó marcar la salida' }));
     const sinMotivo = await c.api('post', '/asistencia/marcaciones', { empleadoId: ids.e2, motivo: '' });
     expect(sinMotivo.status).toBe(400);
     const hoy = ok(await c.api('get', '/asistencia/hoy'));
@@ -117,16 +118,16 @@ describe('API: flujo completo de nómina y asistencia', () => {
   });
 
   it('HU-31 y HU-32: calcula las horas, las aprueba y genera el registro de extras', async () => {
-    const r = ok(await c.api('post', '/asistencia/procesar', { desde: '2026-10-28', hasta: '2026-10-28', empleadoId: ids.e2 }));
+    const r = ok(await c.api('post', '/asistencia/procesar', { desde: '2026-10-21', hasta: '2026-10-21', empleadoId: ids.e2 }));
     expect(r.procesados).toBe(1);
-    const horas = ok(await c.api('get', `/asistencia/horas?desde=2026-10-28&hasta=2026-10-28&empleadoId=${ids.e2}`));
+    const horas = ok(await c.api('get', `/asistencia/horas?desde=2026-10-21&hasta=2026-10-21&empleadoId=${ids.e2}`));
     const tipos = Object.fromEntries(horas.map((h: any) => [h.tipo, h.horas]));
     expect(tipos).toEqual({ HED: '3.6', HEN: '1.4' });
     ok(await c.api('post', '/asistencia/horas/aprobar', { ids: horas.map((h: any) => h.id), aprobar: true, actividad: 'Inventario' }));
     const reg = ok(await c.api('get', `/asistencia/registro-extras/${ids.e2}?desde=2026-10-01&hasta=2026-10-31`));
     expect(reg.registros).toHaveLength(2);
     expect(reg.registros[1].jornada).toBe('nocturna');
-    const alertas = ok(await c.api('get', '/asistencia/alertas?desde=2026-10-28&hasta=2026-10-28'));
+    const alertas = ok(await c.api('get', '/asistencia/alertas?desde=2026-10-21&hasta=2026-10-21'));
     expect(alertas.some((a: any) => a.tipo === 'exceso_extras_dia')).toBe(true);
   });
 

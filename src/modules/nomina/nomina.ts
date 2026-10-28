@@ -117,7 +117,8 @@ export class NominaService {
   private async empleadosDelPeriodo(empresaId: string, p: Pick<PeriodoFila, 'desde' | 'hasta' | 'grupo_pago_id'>, empleadoIds?: string[]) {
     return this.db.many(
       `select e.*, c.id as contrato_id, c.tipo as contrato_tipo, c.fecha_inicio, c.fecha_fin, c.salario_integral, c.factor_prestacional, c.fase_aprendiz,
-              c.auxilio_transporte, c.clase_riesgo, c.tipo_salario, c.horas_semanales
+              c.auxilio_transporte, c.clase_riesgo, c.tipo_salario, c.horas_semanales,
+              (select en.nombre from entidades en where en.id = e.cesantias_id) as fondo_cesantias
        from empleados e
        join lateral (
          select * from contratos c where c.empleado_id = e.id and c.fecha_inicio <= $3 and (c.fecha_fin is null or c.fecha_fin >= $2)
@@ -237,6 +238,7 @@ export class NominaService {
         nombre: nombreCompleto(e),
         fechaIngreso: e.fecha_inicio,
         esPensionado: e.es_pensionado,
+        cesantiasFna: /nacional del ahorro|^fna$/i.test(e.fondo_cesantias ?? ''),
         claseRiesgo: e.clase_riesgo,
         procedimientoRetencion: e.procedimiento_retencion,
         porcentajeProcedimiento2: e.porcentaje_proc2 ?? undefined,
