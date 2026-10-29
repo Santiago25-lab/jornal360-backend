@@ -52,7 +52,6 @@ create table if not exists usuarios (
   ultimo_acceso timestamptz,
   creado_en timestamptz not null default now()
 );
-create unique index if not exists usuarios_usuario_uq on usuarios (lower(usuario));
 
 create table if not exists auditoria (
   id bigserial primary key,
@@ -629,6 +628,26 @@ alter table periodos add column if not exists liquidado_por uuid;
 alter table periodos add column if not exists reabierto_motivo text;
 alter table parametros add column if not exists vigencias_legales jsonb;
 
+-- Varias empresas: cada una entra por su espacio (jornal360…/<espacio>) y el usuario es único dentro de su espacio.
+alter table empresas add column if not exists espacio text;
+create unique index if not exists empresas_espacio_uq on empresas (lower(espacio));
+drop index if exists usuarios_usuario_uq;
+create unique index if not exists usuarios_empresa_usuario_uq on usuarios (empresa_id, lower(usuario));
+
+-- Administradores de la plataforma: están por encima de todas las empresas.
+create table if not exists administradores_plataforma (
+  id uuid primary key default gen_random_uuid(),
+  usuario text not null,
+  nombre text not null,
+  password_hash text not null,
+  activo boolean not null default true,
+  intentos_fallidos int not null default 0,
+  bloqueado_hasta timestamptz,
+  ultimo_acceso timestamptz,
+  creado_en timestamptz not null default now()
+);
+create unique index if not exists administradores_plataforma_usuario_uq on administradores_plataforma (lower(usuario));
+
 -- ---------- Seguridad: Supabase expone las tablas por su API pública.
 -- Se activa RLS sin políticas para que solo el backend (conexión directa) las use.
 do $$
@@ -642,8 +661,8 @@ end $$;
 
 -- ---------- Datos iniciales ----------
 begin;
-insert into empresas (id, nit, razon_social, configuracion) values ('00000000-0000-4000-8000-000000000001', '900000000', 'Mi Empresa S.A.S.', '{"calendario":{"diasLaborales":[1,2,3,4,5,6],"diaDescanso":0,"sabadoHabilVacaciones":true},"horas":{"inicioNocturna":"19:00","finNocturna":"06:00","horasOrdinariasDiaSinTurno":8,"toleranciaMinutos":5,"minimoMinutosExtra":0},"asistencia":{"activa":true,"qrSegundos":30,"qrGracia":5,"minutosDuplicado":5,"permitirExcepcionKiosco":true,"intentosPin":3,"nivelControl":"medio"},"aprobacion":{"pasos":1,"separarLiquidaAprueba":false,"umbralVariacion":0.1},"avisos":{"diasContratoPorVencer":45,"diasPrima":10,"diasCesantias":15,"correo":false},"seguridad":{"intentosLogin":5,"minutosBloqueo":15,"minutosSesion":30},"vacaciones":{"diasPreaviso":15,"maxPeriodosAcumulados":2},"retiro":{"diasPreavisoRenuncia":30,"maxAniosFijo":4},"campos":[]}'::jsonb) on conflict (id) do nothing;
-insert into usuarios (empresa_id, usuario, nombre, password_hash, rol, debe_cambiar_password) select '00000000-0000-4000-8000-000000000001', 'Santiago', 'Santiago', crypt('123456santiago', gen_salt('bf', 10)), 'superusuario', false where not exists (select 1 from usuarios where lower(usuario) = lower('Santiago'));
+insert into empresas (id, nit, razon_social, configuracion, espacio) values ('00000000-0000-4000-8000-000000000001', '900000000', 'Mi Empresa S.A.S.', '{"calendario":{"diasLaborales":[1,2,3,4,5,6],"diaDescanso":0,"sabadoHabilVacaciones":true},"horas":{"inicioNocturna":"19:00","finNocturna":"06:00","horasOrdinariasDiaSinTurno":8,"toleranciaMinutos":5,"minimoMinutosExtra":0},"asistencia":{"activa":true,"qrSegundos":30,"qrGracia":5,"minutosDuplicado":5,"permitirExcepcionKiosco":true,"intentosPin":3,"nivelControl":"medio"},"aprobacion":{"pasos":1,"separarLiquidaAprueba":false,"umbralVariacion":0.1},"avisos":{"diasContratoPorVencer":45,"diasPrima":10,"diasCesantias":15,"correo":false},"seguridad":{"intentosLogin":5,"minutosBloqueo":15,"minutosSesion":30},"vacaciones":{"diasPreaviso":15,"maxPeriodosAcumulados":2},"retiro":{"diasPreavisoRenuncia":30,"maxAniosFijo":4},"campos":[]}'::jsonb, null) on conflict (id) do nothing;
+insert into usuarios (empresa_id, usuario, nombre, password_hash, rol, debe_cambiar_password) select '00000000-0000-4000-8000-000000000001', 'Santiago', 'Santiago', crypt('123456santiago', gen_salt('bf', 10)), 'superusuario', false where not exists (select 1 from usuarios where empresa_id = '00000000-0000-4000-8000-000000000001' and lower(usuario) = lower('Santiago'));
 insert into sedes (empresa_id, nombre) select '00000000-0000-4000-8000-000000000001', 'Sede principal' where not exists (select 1 from sedes where empresa_id = '00000000-0000-4000-8000-000000000001');
 insert into centros_costo (empresa_id, codigo, nombre) values ('00000000-0000-4000-8000-000000000001', 'ADM', 'Administración') on conflict (empresa_id, codigo) do nothing;
 insert into grupos_pago (empresa_id, nombre, periodicidad) select '00000000-0000-4000-8000-000000000001', 'Nómina mensual', 'mensual' where not exists (select 1 from grupos_pago where empresa_id = '00000000-0000-4000-8000-000000000001');

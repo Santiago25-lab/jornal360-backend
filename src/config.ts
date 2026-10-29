@@ -9,6 +9,9 @@ export interface Config {
   origenesCors: string[];
   superadminUsuario: string;
   superadminPassword: string;
+  /** Administrador de la plataforma (por encima de todas las empresas). Sin contraseña no se crea. */
+  plataformaUsuario: string;
+  plataformaPassword: string | null;
   migrarAlIniciar: boolean;
   /** Desfase horario de Colombia en minutos (UTC-5, sin horario de verano). */
   desfaseMinutos: number;
@@ -34,6 +37,8 @@ export function config(): Config {
     origenesCors: (env.CORS_ORIGENES ?? 'http://localhost:3000').split(',').map((s) => s.trim()).filter(Boolean),
     superadminUsuario: env.SUPERADMIN_USUARIO ?? 'Santiago',
     superadminPassword: env.SUPERADMIN_PASSWORD ?? '123456santiago',
+    plataformaUsuario: env.PLATAFORMA_USUARIO ?? 'Santiago',
+    plataformaPassword: env.PLATAFORMA_PASSWORD || null,
     migrarAlIniciar: (env.MIGRAR_AL_INICIAR ?? 'true') === 'true',
     desfaseMinutos: Number(env.DESFASE_MINUTOS ?? -300),
     urlFrontend: env.URL_FRONTEND ?? 'http://localhost:3000',

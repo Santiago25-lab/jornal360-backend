@@ -26,11 +26,27 @@ export interface UsuarioSesion {
   usuario: string;
   nombre: string;
   rol: 'superusuario' | 'analista' | 'contador' | 'aprobador' | 'supervisor';
+  /** Espacio de la empresa (jornal360…/<espacio>). */
+  espacio?: string;
+  /** El administrador de la plataforma entró a dar soporte: no es un usuario de la empresa. */
+  soporte?: boolean;
+}
+
+/** Sesión del administrador de la plataforma: no pertenece a ninguna empresa. */
+export interface SesionPlataforma {
+  tipo: 'plataforma';
+  id: string;
+  usuario: string;
+  nombre: string;
 }
 
 export const ES_PUBLICO = 'esPublico';
 /** Ruta sin inicio de sesión (marcación, kiosco, vinculación). */
 export const Publico = () => SetMetadata(ES_PUBLICO, true);
+
+export const SOLO_PLATAFORMA = 'soloPlataforma';
+/** Ruta del panel de la plataforma: solo con la sesión del administrador de la plataforma. */
+export const SoloPlataforma = () => SetMetadata(SOLO_PLATAFORMA, true);
 
 export const ROLES = 'roles';
 /** Roles permitidos. El superusuario siempre tiene acceso. */
@@ -59,11 +75,18 @@ export class AuthGuard implements CanActivate {
     const h = req.headers.authorization ?? '';
     const token = h.startsWith('Bearer ') ? h.slice(7) : (req.query?.token as string | undefined);
     if (!token) throw new UnauthorizedException('Debe iniciar sesión');
+    let sesion: UsuarioSesion | SesionPlataforma;
     try {
-      req.usuario = this.jwt.verify<UsuarioSesion>(token);
+      sesion = this.jwt.verify<UsuarioSesion | SesionPlataforma>(token);
     } catch {
       throw new UnauthorizedException('La sesión venció. Inicie sesión de nuevo');
     }
+    // La sesión de la plataforma y la de una empresa no se sirven entre sí.
+    const plataforma = !!this.reflector.getAllAndOverride<boolean>(SOLO_PLATAFORMA, [ctx.getHandler(), ctx.getClass()]);
+    const esPlataforma = (sesion as SesionPlataforma).tipo === 'plataforma';
+    if (plataforma !== esPlataforma) throw new UnauthorizedException(plataforma ? 'Inicie sesión como administrador de la plataforma' : 'Inicie sesión en el espacio de su empresa');
+    req.usuario = sesion as UsuarioSesion;
+    if (esPlataforma) return true;
     const roles = this.reflector.getAllAndOverride<UsuarioSesion['rol'][]>(ROLES, [ctx.getHandler(), ctx.getClass()]);
     if (roles?.length && req.usuario.rol !== 'superusuario' && !roles.includes(req.usuario.rol))
       throw new ForbiddenException('No tiene permiso para esta acción');

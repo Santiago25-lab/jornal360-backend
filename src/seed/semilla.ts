@@ -56,6 +56,8 @@ export interface OpcionesSemilla {
   empresaId?: string;
   razonSocial?: string;
   nit?: string;
+  /** Nombre del espacio: la dirección por la que entra la empresa (jornal360…/<espacio>). */
+  espacio?: string;
   usuario: string;
   nombreUsuario: string;
   /** Expresión SQL que produce el hash de la contraseña (p. ej. crypt(...) o un literal). */
@@ -145,8 +147,8 @@ export function sqlSemilla(o: OpcionesSemilla): string {
   const id = o.empresaId ?? EMPRESA_INICIAL_ID;
   const anios = o.aniosFestivos ?? [2025, 2026, 2027, 2028];
   return [
-    `insert into empresas (id, nit, razon_social, configuracion) values (${q(id)}, ${q(o.nit ?? '900000000')}, ${q(o.razonSocial ?? 'Mi Empresa S.A.S.')}, ${j(CONFIGURACION_INICIAL)}) on conflict (id) do nothing;`,
-    `insert into usuarios (empresa_id, usuario, nombre, password_hash, rol, debe_cambiar_password) select ${q(id)}, ${q(o.usuario)}, ${q(o.nombreUsuario)}, ${o.passwordHashSql}, 'superusuario', ${q(!!o.debeCambiarPassword)} where not exists (select 1 from usuarios where lower(usuario) = lower(${q(o.usuario)}));`,
+    `insert into empresas (id, nit, razon_social, configuracion, espacio) values (${q(id)}, ${q(o.nit ?? '900000000')}, ${q(o.razonSocial ?? 'Mi Empresa S.A.S.')}, ${j(CONFIGURACION_INICIAL)}, ${o.espacio ? q(o.espacio) : 'null'}) on conflict (id) do nothing;`,
+    `insert into usuarios (empresa_id, usuario, nombre, password_hash, rol, debe_cambiar_password) select ${q(id)}, ${q(o.usuario)}, ${q(o.nombreUsuario)}, ${o.passwordHashSql}, 'superusuario', ${q(!!o.debeCambiarPassword)} where not exists (select 1 from usuarios where empresa_id = ${q(id)} and lower(usuario) = lower(${q(o.usuario)}));`,
     `insert into sedes (empresa_id, nombre) select ${q(id)}, 'Sede principal' where not exists (select 1 from sedes where empresa_id = ${q(id)});`,
     `insert into centros_costo (empresa_id, codigo, nombre) values (${q(id)}, 'ADM', 'Administración') on conflict (empresa_id, codigo) do nothing;`,
     `insert into grupos_pago (empresa_id, nombre, periodicidad) select ${q(id)}, 'Nómina mensual', 'mensual' where not exists (select 1 from grupos_pago where empresa_id = ${q(id)});`,

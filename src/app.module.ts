@@ -24,6 +24,7 @@ import { ESTRUCTURA_CONTROLLERS } from './modules/configuracion/estructura';
 import { SectorPublicoController, SectorPublicoService } from './modules/configuracion/sector-publico';
 import { EmpleadosController, EmpleadosService } from './modules/empleados/empleados';
 import { MODULOS_OPERACION } from './modules/operacion';
+import { PlataformaController, PlataformaService } from './modules/plataforma/plataforma';
 
 @Controller()
 class SaludController {
@@ -51,6 +52,7 @@ class SaludController {
     FormatosController,
     RespaldoController,
     SectorPublicoController,
+    PlataformaController,
     ...ESTRUCTURA_CONTROLLERS,
     EmpleadosController,
     ...MODULOS_OPERACION.controllers,
@@ -65,6 +67,7 @@ class SaludController {
     ConceptosService,
     RespaldoService,
     SectorPublicoService,
+    PlataformaService,
     EmpleadosService,
     ...MODULOS_OPERACION.providers,
     { provide: APP_GUARD, useClass: AuthGuard },

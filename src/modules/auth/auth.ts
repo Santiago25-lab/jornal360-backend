@@ -8,7 +8,7 @@ import { camel, camelLista } from '../../common/util';
 import { config } from '../../config';
 import { Db } from '../../db/db.service';
 
-const LoginDto = z.object({ usuario: z.string().trim().min(1, 'Escriba su usuario'), password: z.string().min(1, 'Escriba su contraseña') });
+const LoginDto = z.object({ usuario: z.string().trim().min(1, 'Escriba su usuario'), password: z.string().min(1, 'Escriba su contraseña'), espacio: z.string().trim().toLowerCase().optional() });
 const CambioDto = z.object({ actual: z.string().min(1), nueva: z.string().min(8, 'La nueva contraseña debe tener al menos 8 caracteres') });
 const UsuarioDto = z.object({
   usuario: z.string().trim().min(3),
@@ -27,11 +27,17 @@ export class AuthService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
-  async login(usuario: string, password: string, ip: string) {
-    const u = await this.db.maybe(
-      `select u.*, e.configuracion from usuarios u join empresas e on e.id = u.empresa_id where lower(u.usuario) = lower($1)`,
-      [usuario],
+  /** Inicia sesión dentro de un espacio. Sin espacio solo funciona si el usuario existe en uno solo. */
+  async login(usuario: string, password: string, ip: string, espacio?: string) {
+    if (espacio && !(await this.db.maybe('select 1 from empresas where lower(espacio) = $1', [espacio])))
+      throw new ErrorNegocio('Ese espacio no existe. Revise el enlace que le dieron', 404);
+    const candidatos = await this.db.many(
+      `select u.*, e.configuracion, e.espacio from usuarios u join empresas e on e.id = u.empresa_id
+       where lower(u.usuario) = lower($1) and ($2::text is null or lower(e.espacio) = $2)`,
+      [usuario, espacio ?? null],
     );
+    if (candidatos.length > 1) throw new ErrorNegocio('Entre por el enlace del espacio de su empresa', 400);
+    const u = candidatos[0];
     const seg = u?.configuracion?.seguridad ?? {};
     const maxIntentos = Number(seg.intentosLogin ?? 5);
     const minutos = Number(seg.minutosBloqueo ?? 15);
@@ -51,7 +57,7 @@ export class AuthService {
       throw new ErrorNegocio('Usuario o contraseña incorrectos', 401);
     }
     await this.db.exec(`update usuarios set intentos_fallidos = 0, bloqueado_hasta = null, ultimo_acceso = now() where id = $1`, [u.id]);
-    const sesion: UsuarioSesion = { id: u.id, empresaId: u.empresa_id, usuario: u.usuario, nombre: u.nombre, rol: u.rol };
+    const sesion: UsuarioSesion = { id: u.id, empresaId: u.empresa_id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, espacio: u.espacio };
     await this.auditoria.registrar(sesion, 'login', 'usuario', u.id, null, null, { ip });
     return {
       token: this.jwt.sign(sesion, { expiresIn: `${config().jwtHoras}h` }),
@@ -60,10 +66,25 @@ export class AuthService {
     };
   }
 
+  /** Datos públicos del espacio para la pantalla de ingreso. */
+  async espacio(espacio: string) {
+    const e = await this.db.maybe('select espacio, razon_social, asistente_completado from empresas where lower(espacio) = lower($1)', [espacio]);
+    if (!e) throw new ErrorNegocio('Ese espacio no existe. Revise el enlace que le dieron', 404);
+    // Mientras la empresa no termine el asistente, su razón social es la provisional: se muestra el nombre del espacio.
+    return { espacio: e.espacio, nombre: e.asistente_completado ? e.razon_social : null };
+  }
+
   async yo(u: UsuarioSesion) {
+    if (u.soporte) {
+      const e = await this.db.one(
+        `select id as empresa_id, espacio, razon_social, nit, asistente_completado, asistente_paso, configuracion from empresas where id = $1`,
+        [u.empresaId],
+      );
+      return { ...camel<any>(e), id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, soporte: true, debeCambiarPassword: false };
+    }
     const r = await this.db.one(
       `select u.id, u.usuario, u.nombre, u.correo, u.rol, u.debe_cambiar_password, u.ultimo_acceso,
-              e.id as empresa_id, e.razon_social, e.nit, e.asistente_completado, e.asistente_paso, e.configuracion
+              e.id as empresa_id, e.espacio, e.razon_social, e.nit, e.asistente_completado, e.asistente_paso, e.configuracion
        from usuarios u join empresas e on e.id = u.empresa_id where u.id = $1`,
       [u.id],
     );
@@ -71,6 +92,7 @@ export class AuthService {
   }
 
   async cambiarPassword(u: UsuarioSesion, actual: string, nueva: string) {
+    if (u.soporte) throw new ErrorNegocio('En modo soporte no se cambia la contraseña: hágalo desde el panel de la plataforma');
     const r = await this.db.one('select password_hash from usuarios where id = $1', [u.id]);
     if (!(await bcrypt.compare(actual, r.password_hash))) throw new ErrorNegocio('La contraseña actual no es correcta');
     if (actual === nueva) throw new ErrorNegocio('La nueva contraseña debe ser distinta de la actual');
@@ -89,6 +111,8 @@ export class AuthService {
   }
 
   async crear(u: UsuarioSesion, d: z.infer<typeof UsuarioDto>) {
+    if (await this.db.maybe('select 1 from usuarios where empresa_id = $1 and lower(usuario) = lower($2)', [u.empresaId, d.usuario]))
+      throw new ErrorNegocio('Ya existe un usuario con ese nombre en este espacio', 409);
     const r = await this.db.one(
       `insert into usuarios (empresa_id, usuario, nombre, correo, rol, password_hash, debe_cambiar_password)
        values ($1, $2, $3, $4, $5, $6, true) returning id, usuario, nombre, correo, rol, activo`,
@@ -122,7 +146,13 @@ export class AuthController {
   @Publico()
   @Post('login')
   login(@Body(new Validar(LoginDto)) d: z.infer<typeof LoginDto>, @Ip() ip: string) {
-    return this.s.login(d.usuario, d.password, ip);
+    return this.s.login(d.usuario, d.password, ip, d.espacio);
+  }
+
+  @Publico()
+  @Get('espacio/:espacio')
+  espacio(@Param('espacio') espacio: string) {
+    return this.s.espacio(espacio);
   }
 
   @Get('yo')

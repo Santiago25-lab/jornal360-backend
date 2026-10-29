@@ -29,6 +29,8 @@ export async function levantar(nombre: string): Promise<Contexto> {
   process.env.DATABASE_SSL = 'false';
   process.env.SUPERADMIN_USUARIO = 'Santiago';
   process.env.SUPERADMIN_PASSWORD = '123456santiago';
+  process.env.PLATAFORMA_USUARIO = 'Santiago';
+  process.env.PLATAFORMA_PASSWORD = 'clave-plataforma-prueba';
   process.env.JWT_SECRETO = 'prueba-jwt';
   process.env.QR_SECRETO = 'prueba-qr';
   jest.resetModules();

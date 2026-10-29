@@ -45,7 +45,6 @@ create table if not exists usuarios (
   ultimo_acceso timestamptz,
   creado_en timestamptz not null default now()
 );
-create unique index if not exists usuarios_usuario_uq on usuarios (lower(usuario));
 
 create table if not exists auditoria (
   id bigserial primary key,
@@ -621,6 +620,26 @@ create table if not exists pagos (
 alter table periodos add column if not exists liquidado_por uuid;
 alter table periodos add column if not exists reabierto_motivo text;
 alter table parametros add column if not exists vigencias_legales jsonb;
+
+-- Varias empresas: cada una entra por su espacio (jornal360…/<espacio>) y el usuario es único dentro de su espacio.
+alter table empresas add column if not exists espacio text;
+create unique index if not exists empresas_espacio_uq on empresas (lower(espacio));
+drop index if exists usuarios_usuario_uq;
+create unique index if not exists usuarios_empresa_usuario_uq on usuarios (empresa_id, lower(usuario));
+
+-- Administradores de la plataforma: están por encima de todas las empresas.
+create table if not exists administradores_plataforma (
+  id uuid primary key default gen_random_uuid(),
+  usuario text not null,
+  nombre text not null,
+  password_hash text not null,
+  activo boolean not null default true,
+  intentos_fallidos int not null default 0,
+  bloqueado_hasta timestamptz,
+  ultimo_acceso timestamptz,
+  creado_en timestamptz not null default now()
+);
+create unique index if not exists administradores_plataforma_usuario_uq on administradores_plataforma (lower(usuario));
 
 -- ---------- Seguridad: Supabase expone las tablas por su API pública.
 -- Se activa RLS sin políticas para que solo el backend (conexión directa) las use.
