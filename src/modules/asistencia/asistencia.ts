@@ -372,6 +372,82 @@ export class AsistenciaService {
     return res;
   }
 
+  /**
+   * Asistencia de un día por empleado: primera entrada, última salida, minutos tarde,
+   * minutos de salida anticipada, horas trabajadas y estado (incluye novedades y festivos).
+   */
+  async diario(u: UsuarioSesion, fecha: string) {
+    const ctx = await this.contexto.cargar(u.empresaId);
+    const hoy = fechaLocal();
+    const ahora = aLocal(new Date()).slice(11, 16);
+    const empleados = await this.db.many(
+      `select e.id, e.nombres, e.apellidos, e.numero_documento, e.cargo, t.dias from empleados e left join turnos t on t.id = e.turno_id
+       where e.empresa_id = $1 and e.estado = 'activo' order by e.apellidos, e.nombres`,
+      [u.empresaId],
+    );
+    const marcas = await this.listarMarcaciones(u, { desde: fecha, hasta: fecha });
+    const novedades = await this.db.many(
+      `select empleado_id, tipo from novedades where empresa_id = $1 and clase = 'dias' and estado = 'aprobada' and desde <= $2 and hasta >= $2`,
+      [u.empresaId, fecha],
+    );
+    const especial = await this.db.maybe(`select descripcion from dias_especiales where empresa_id = $1 and fecha = $2 and sede_id is null`, [u.empresaId, fecha]);
+    const ds = new Date(`${fecha}T12:00:00Z`).getUTCDay();
+    const tol = ctx.configuracion.horas.toleranciaMinutos;
+    const festivo = ctx.festivos.includes(fecha);
+    const filas = empleados.map((e) => {
+      const franjas = ((e.dias ?? {}) as Record<string, { inicio: string; fin: string }[]>)[String(ds)] ?? [];
+      const programado = franjas.length > 0 && !festivo && !especial;
+      const m = marcas.filter((x: any) => x.empleadoId === e.id);
+      const entradas = m.filter((x: any) => x.tipo === 'entrada');
+      const salidas = m.filter((x: any) => x.tipo === 'salida');
+      const entrada: string | null = entradas[0]?.horaLocal?.slice(11, 16) ?? null;
+      const ultimaSalida = salidas.length ? salidas[salidas.length - 1] : null;
+      const salida: string | null = ultimaSalida && (!entradas[0] || ultimaSalida.horaLocal > entradas[0].horaLocal) ? ultimaSalida.horaLocal.slice(11, 16) : null;
+      const inicio = franjas[0]?.inicio ?? null;
+      const fin = franjas[franjas.length - 1]?.fin ?? null;
+      const tarde = entrada && inicio && programado ? Math.max(0, minutos(entrada) - minutos(inicio)) : 0;
+      const temprano = salida && fin && programado && minutos(fin) > minutos(inicio ?? '00:00') ? Math.max(0, minutos(fin) - minutos(salida)) : 0;
+      const { intervalos } = emparejarMarcaciones(m.map((x: any) => ({ tipo: x.tipo, hora: x.horaLocal })));
+      const trabajados = intervalos.reduce((a, iv) => a + Math.max(0, (new Date(iv.salida).getTime() - new Date(iv.entrada).getTime()) / 60000), 0);
+      const novedad = novedades.find((n) => n.empleado_id === e.id)?.tipo ?? null;
+      const ultima = m[m.length - 1];
+      let estado: string;
+      if (novedad && !entrada) estado = 'novedad';
+      else if (ultima?.tipo === 'entrada') estado = fecha < hoy ? 'sin_salida' : 'trabajando';
+      else if (entrada && salida) estado = 'completo';
+      else if (!programado) estado = festivo ? 'festivo' : especial ? 'dia_especial' : 'descanso';
+      else if (fecha > hoy || (fecha === hoy && inicio && inicio > ahora)) estado = 'programado';
+      else estado = 'no_llego';
+      return {
+        empleadoId: e.id,
+        empleado: nombreCompleto(e),
+        documento: e.numero_documento,
+        cargo: e.cargo,
+        entrada,
+        minutosTarde: tarde > tol ? tarde : 0,
+        salida,
+        minutosAntes: temprano > tol ? temprano : 0,
+        minutosTrabajados: Math.round(trabajados),
+        marcaciones: m.length,
+        estado,
+        novedad,
+      };
+    });
+    return {
+      fecha,
+      festivo: festivo ? ((await this.db.maybe('select nombre from festivos where empresa_id = $1 and fecha = $2', [u.empresaId, fecha]))?.nombre ?? 'Festivo') : null,
+      diaEspecial: especial?.descripcion ?? null,
+      resumen: {
+        llegaron: filas.filter((f) => f.entrada).length,
+        tarde: filas.filter((f) => f.minutosTarde > 0).length,
+        salieronAntes: filas.filter((f) => f.minutosAntes > 0).length,
+        noLlegaron: filas.filter((f) => f.estado === 'no_llego').length,
+        sinSalida: filas.filter((f) => f.estado === 'sin_salida').length,
+      },
+      filas,
+    };
+  }
+
   // ---------- Cálculo y aprobación de horas (HU-31, HU-32) ----------
 
   async procesar(u: UsuarioSesion, d: { desde: string; hasta: string; empleadoId?: string | null }) {
@@ -614,6 +690,11 @@ export class AsistenciaController {
   @Get('marcaciones')
   marcaciones(@Usuario() u: UsuarioSesion, @Query() q: any) {
     return this.s.listarMarcaciones(u, q);
+  }
+
+  @Get('diario')
+  diario(@Usuario() u: UsuarioSesion, @Query('fecha') fecha?: string) {
+    return this.s.diario(u, /^\d{4}-\d{2}-\d{2}$/.test(fecha ?? '') ? fecha! : fechaLocal());
   }
 
   @Get('hoy')

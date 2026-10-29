@@ -131,6 +131,20 @@ describe('API: flujo completo de nómina y asistencia', () => {
     expect(alertas.some((a: any) => a.tipo === 'exceso_extras_dia')).toBe(true);
   });
 
+  it('asistencia del día: entrada, salida, llegada tarde, salida anticipada y horas', async () => {
+    const d = ok(await c.api('get', '/asistencia/diario?fecha=2026-10-21'));
+    const jose = d.filas.find((f: any) => f.empleadoId === ids.e2);
+    expect(jose).toMatchObject({ entrada: '07:00', salida: '20:24', minutosTarde: 0, minutosAntes: 0, minutosTrabajados: 804, estado: 'completo' });
+    const maria = d.filas.find((f: any) => f.empleadoId === ids.e1);
+    expect(maria).toMatchObject({ entrada: null, salida: null, estado: 'no_llego' });
+    // Llegó 40 minutos tarde y salió dos horas antes del fin del turno (7:00 a 15:24).
+    ok(await c.api('post', '/asistencia/marcaciones', { empleadoId: ids.e1, tipo: 'entrada', hora: '2026-10-22T07:40', motivo: 'Prueba' }));
+    ok(await c.api('post', '/asistencia/marcaciones', { empleadoId: ids.e1, tipo: 'salida', hora: '2026-10-22T13:24', motivo: 'Prueba' }));
+    const d2 = ok(await c.api('get', '/asistencia/diario?fecha=2026-10-22'));
+    expect(d2.filas.find((f: any) => f.empleadoId === ids.e1)).toMatchObject({ entrada: '07:40', salida: '13:24', minutosTarde: 40, minutosAntes: 120, minutosTrabajados: 344, estado: 'completo' });
+    expect(d2.resumen).toMatchObject({ tarde: 1, salieronAntes: 1 });
+  });
+
   it('HU-33 a HU-39: novedades, vacaciones, préstamos y embargos', async () => {
     const inc = ok(await c.api('post', '/novedades/dias', { empleadoId: ids.e1, tipo: 'incapacidad_eg', desde: '2026-10-05', hasta: '2026-10-09', diagnostico: 'J00' }));
     expect(inc.diasCalendario).toBe(5);

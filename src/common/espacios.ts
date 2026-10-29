@@ -3,7 +3,7 @@
 /** Rutas del sistema: un espacio no puede llamarse igual. */
 export const ESPACIOS_RESERVADOS = new Set([
   'api', 'plataforma', 'login', 'inicio', 'empleados', 'asistencia', 'novedades', 'nomina', 'prestaciones', 'retiros', 'reportes',
-  'configuracion', 'asistente', 'ayuda', 'marcar', 'vincular', 'kiosco', 'pantalla-qr', 'salud', 'publico', 'admin', 'soporte',
+  'configuracion', 'asistente', 'ayuda', 'liquidador', 'marcar', 'vincular', 'kiosco', 'pantalla-qr', 'salud', 'publico', 'admin', 'soporte',
 ]);
 
 /** "Alcaldía de Pasto" → "alcaldia-de-pasto". */

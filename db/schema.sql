@@ -627,6 +627,38 @@ create unique index if not exists empresas_espacio_uq on empresas (lower(espacio
 drop index if exists usuarios_usuario_uq;
 create unique index if not exists usuarios_empresa_usuario_uq on usuarios (empresa_id, lower(usuario));
 
+-- Liquidador independiente: liquidaciones con datos digitados, sin tocar la nómina de la empresa.
+create table if not exists liquidaciones_libres (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  nombre text not null,
+  cliente_razon_social text,
+  cliente_nit text,
+  tipo text not null check (tipo in ('nomina', 'prima', 'cesantias', 'vacaciones', 'retiro')),
+  regimen text not null check (regimen in ('privado', 'publico')),
+  desde date not null,
+  hasta date not null,
+  fecha_pago date,
+  exonerada boolean not null default true,
+  opciones jsonb not null default '{}',
+  parametros jsonb not null default '{}',
+  estado text not null default 'borrador' check (estado in ('borrador', 'liquidada')),
+  totales jsonb,
+  liquidado_en timestamptz,
+  creado_por uuid,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
+);
+create index if not exists liquidaciones_libres_empresa_idx on liquidaciones_libres (empresa_id, creado_en desc);
+create table if not exists liquidaciones_libres_empleados (
+  id uuid primary key default gen_random_uuid(),
+  liquidacion_id uuid not null references liquidaciones_libres(id) on delete cascade,
+  orden int not null default 0,
+  datos jsonb not null,
+  resultado jsonb
+);
+create index if not exists liquidaciones_libres_empleados_idx on liquidaciones_libres_empleados (liquidacion_id, orden);
+
 -- Administradores de la plataforma: están por encima de todas las empresas.
 create table if not exists administradores_plataforma (
   id uuid primary key default gen_random_uuid(),
